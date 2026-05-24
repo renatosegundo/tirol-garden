@@ -99,7 +99,8 @@
   .card-del svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
   .card:hover .card-del { opacity: 1; }
   .card-del:hover { color: var(--danger); background: var(--danger-light); }
-  .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-right: 24px; }
+  .card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding-right: 24px; }
+  .card-info { min-width: 0; flex: 1; }
   .avatar { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 500; font-size: 14px; flex-shrink: 0; font-family: 'DM Serif Display', serif; }
   .card-name { font-weight: 500; font-size: 0.95em; color: var(--text); line-height: 1.3; }
   .card-cat { font-size: 0.8em; color: var(--muted); margin-top: 2px; }
@@ -111,6 +112,19 @@
   .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; min-height: 22px; }
   .nota-badge { display: inline-block; background: var(--warn-light); color: var(--warn); font-size: 0.75em; padding: 3px 10px; border-radius: 99px; border: 1px solid rgba(138,90,26,0.2); }
   .avg-count { font-size: 0.75em; color: var(--hint); }
+  .tipo-badge { display: inline-flex; align-items: center; font-size: 0.72em; padding: 2px 8px; border-radius: 99px; font-weight: 500; white-space: nowrap; margin-top: 3px; }
+  .tipo-autonomo   { background: #e8f0ea; color: #1a4a2a; }
+  .tipo-empresa    { background: #e8e8f5; color: #2a2a6a; }
+  .tipo-comercio   { background: #f5eee8; color: #5a2a0a; }
+  .tipo-saude      { background: #e8f5f5; color: #0a4a4a; }
+  .tipo-publico    { background: #fdeaea; color: #7a1a1a; }
+  .tipo-condominio { background: #f0e8f0; color: #4a1a4a; }
+  body.force-dark .tipo-autonomo   { background: #0f2018; color: #7ac99a; }
+  body.force-dark .tipo-empresa    { background: #0f0f2a; color: #8a8acf; }
+  body.force-dark .tipo-comercio   { background: #2a1500; color: #c8823a; }
+  body.force-dark .tipo-saude      { background: #001a1a; color: #3acfcf; }
+  body.force-dark .tipo-publico    { background: #1a0000; color: #cf5a5a; }
+  body.force-dark .tipo-condominio { background: #1a001a; color: #bf6abf; }
   .empty-state { grid-column: 1/-1; text-align: center; padding: 4rem 2rem; color: var(--muted); }
   .empty-state svg { width: 40px; height: 40px; stroke: var(--hint); fill: none; margin: 0 auto 12px; display: block; }
 
@@ -251,7 +265,7 @@
         <svg viewBox="0 0 24 24" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="search" placeholder="Buscar por nome, categoria ou indicado por..." oninput="onSearch()">
       </div>
-      <select class="filter-select" id="filterCat" onchange="onFilter()">
+      <select id="filterCat" style="display:none">
         <option value="">Todas as categorias</option>
       </select>
     </div>
@@ -293,6 +307,13 @@
             <div class="ac-dropdown" id="f-cat-drop"></div>
           </div>
           <input type="hidden" id="f-cat-val">
+        </div>
+        <div class="form-group full">
+          <label>Tipo de cadastro</label>
+          <div class="ac-wrap">
+            <input type="text" id="f-tipo" placeholder="Ex: Profissional Autônomo..." autocomplete="off" oninput="tipoAcInput('f-tipo')" onfocus="tipoAcInput('f-tipo')" onkeydown="acKey(event,'f-tipo')">
+            <div class="ac-dropdown" id="f-tipo-drop"></div>
+          </div>
         </div>
       </div>
       <div class="form-section-title">Contato</div>
@@ -411,6 +432,13 @@
           </div>
           <input type="hidden" id="e-cat-val">
         </div>
+        <div class="form-group full">
+          <label>Tipo de cadastro</label>
+          <div class="ac-wrap">
+            <input type="text" id="e-tipo" placeholder="Ex: Profissional Autônomo..." autocomplete="off" oninput="tipoAcInput('e-tipo')" onfocus="tipoAcInput('e-tipo')" onkeydown="acKey(event,'e-tipo')">
+            <div class="ac-dropdown" id="e-tipo-drop"></div>
+          </div>
+        </div>
         <div class="form-group"><label>Telefone</label><input type="tel" id="e-tel"></div>
         <div class="form-group"><label>WhatsApp</label><input type="tel" id="e-wa"></div>
         <div class="form-group"><label>Instagram</label><input type="text" id="e-ig"></div>
@@ -450,6 +478,17 @@ const PALETTES = [
   {bg:'#e8f0ea',fg:'#1a4a2a'},{bg:'#e8e8f5',fg:'#2a2a6a'},
   {bg:'#f5eee8',fg:'#5a2a0a'},{bg:'#f0e8f0',fg:'#4a1a4a'},{bg:'#e8f5f5',fg:'#0a4a4a'}
 ];
+// Campo TIPO: mapeia o valor vindo da planilha para opção válida
+function normalizeTipo(val) {
+  if (!val) return '';
+  const v = normalize(val);
+  if (v.includes('empresa') || v.includes('prestadora')) return 'Empresa / Prestadora';
+  if (v.includes('comercio') || v.includes('loja')) return 'Comércio / Loja';
+  if (v.includes('clinica') || v.includes('saude')) return 'Clínica / Saúde';
+  if (v.includes('publico') || v.includes('emergencia')) return 'Serviço Público';
+  if (v.includes('autonomo')) return 'Profissional Autônomo';
+  return val; // mantém o valor original se não reconhecido
+}
 
 let contacts = [], reviews = [], customCats = [];
 let currentContactIdx = null, selectedRevStar = '', selectedAddStar = '', fontSize = 17;
@@ -507,6 +546,28 @@ function formatPhone(v) {
 function initials(n) { return String(n).trim().split(' ').filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join(''); }
 function palette(i) { return PALETTES[i%PALETTES.length]; }
 function starsStr(n) { return '⭐'.repeat(Math.round(n)); }
+function tipoClass(tipo) {
+  if (!tipo) return 'tipo-autonomo';
+  const t = normalize(tipo);
+  if (t.includes('autonomo') || t.includes('autonomo')) return 'tipo-autonomo';
+  if (t.includes('empresa') || t.includes('prestadora')) return 'tipo-empresa';
+  if (t.includes('comercio') || t.includes('loja')) return 'tipo-comercio';
+  if (t.includes('clinica') || t.includes('saude')) return 'tipo-saude';
+  if (t.includes('publico') || t.includes('emergencia')) return 'tipo-publico';
+  if (t.includes('condominio') || t.includes('condominial')) return 'tipo-condominio';
+  return 'tipo-autonomo';
+}
+function suggestTipo(cat) {
+  if (!cat) return 'Profissional Autônomo';
+  const cn = normalize(cat);
+  if (cn.includes('clinica') || cn.includes('hospital') || cn.includes('laboratorio')) return 'Clínica / Saúde';
+  if (cn.includes('loja') || cn.includes('farmacia') || cn.includes('mercado') || cn.includes('buffet')) return 'Comércio / Loja';
+  const grp = getCatKey(cat);
+  if (grp === 'Emergência') return 'Serviço Público';
+  if (grp === 'Condomínio') return 'Outros';
+  if (grp === 'Comércio') return 'Comércio / Loja';
+  return 'Profissional Autônomo';
+}
 function avgRating(cid) {
   const r = reviews.filter(r => String(r.contact_id) === String(cid));
   if (!r.length) return null;
@@ -638,6 +699,26 @@ function onFilter() {
 // ── AUTOCOMPLETE ──
 let acIndex = { 'f-cat': -1, 'e-cat': -1 };
 
+const TIPO_OPTIONS = ['Profissional Autônomo','Empresa / Prestadora','Comércio / Loja','Clínica / Saúde','Serviço Público','Outros'];
+
+function tipoAcInput(id) {
+  const input = document.getElementById(id);
+  const drop  = document.getElementById(id+'-drop');
+  const q     = input.value.trim();
+  const qNorm = normalize(q);
+  acIndex[id]  = -1;
+  const filtered = q ? TIPO_OPTIONS.filter(t => normalize(t).includes(qNorm)) : TIPO_OPTIONS;
+  drop.innerHTML = filtered.length
+    ? filtered.map(t => `<div class="ac-item" data-val="${t}" onmousedown="tipoAcSelect('${id}','${t.replace(/'/g,"\\'")}')">${t}</div>`).join('')
+    : `<div class="ac-item" style="color:var(--hint);cursor:default">Nenhuma encontrada</div>`;
+  drop.classList.add('open');
+}
+
+function tipoAcSelect(id, val) {
+  document.getElementById(id).value = val;
+  document.getElementById(id+'-drop').classList.remove('open');
+}
+
 function acInput(id) {
   const input = document.getElementById(id);
   const drop  = document.getElementById(id+'-drop');
@@ -663,12 +744,18 @@ function acSelect(id, val) {
   document.getElementById(id).value = val;
   document.getElementById(id+'-val').value = val;
   document.getElementById(id+'-drop').classList.remove('open');
+  const tipoId = id === 'f-cat' ? 'f-tipo' : 'e-tipo';
+  const tipoEl = document.getElementById(tipoId);
+  if (tipoEl && (!tipoEl.value || tipoEl.value === 'Profissional Autônomo')) tipoEl.value = suggestTipo(val);
 }
 
 function acSelectNew(id, val) {
   document.getElementById(id).value = val;
   document.getElementById(id+'-val').value = '__NEW__:' + val;
   document.getElementById(id+'-drop').classList.remove('open');
+  const tipoId = id === 'f-cat' ? 'f-tipo' : 'e-tipo';
+  const tipoEl = document.getElementById(tipoId);
+  if (tipoEl && (!tipoEl.value || tipoEl.value === 'Profissional Autônomo')) tipoEl.value = suggestTipo(val);
 }
 
 function acKey(e, id) {
@@ -687,7 +774,7 @@ function acHighlight(id, items) {
 }
 
 document.addEventListener('click', e => {
-  ['f-cat','e-cat'].forEach(id => {
+  ['f-cat','e-cat','f-tipo','e-tipo'].forEach(id => {
     const wrap = document.getElementById(id)?.closest('.ac-wrap');
     if (wrap && !wrap.contains(e.target)) document.getElementById(id+'-drop')?.classList.remove('open');
   });
@@ -775,7 +862,7 @@ function renderCards() {
       </button>
       <div class="card-header">
         <div class="avatar" style="background:${p.bg};color:${p.fg}">${initials(c.nome)}</div>
-        <div><div class="card-name">${c.nome}</div><div class="card-cat">${c.cat}</div></div>
+        <div class="card-info"><div class="card-name">${c.nome}</div><div class="card-cat">${c.cat}</div>${c.tipo?`<div class="tipo-badge ${tipoClass(c.tipo)}">${c.tipo}</div>`:''}</div>
       </div>
       ${details?`<div class="card-details">${details}</div>`:''}
       <div class="card-footer">
@@ -795,6 +882,7 @@ function openModal(idx) {
   document.getElementById('modal-avg').textContent = avg!==null ? `${starsStr(avg)} ${avg.toFixed(1)} · ${rc} avaliação(ões)` : '';
 
   const rows = [
+    ['Tipo',        c.tipo,  '', ''],
     ['Telefone',    formatPhone(c.tel), null, null],
     ['WhatsApp',    formatPhone(c.wa),  c.wa?`https://wa.me/55${String(c.wa).replace(/\D/g,'')}`:'', 'Abrir WhatsApp'],
     ['Instagram',   c.ig,  c.ig?`https://instagram.com/${c.ig.replace('@','')}`:'', 'Ver Instagram'],
@@ -881,6 +969,7 @@ function openEditModal() {
   document.getElementById('e-indicado').value= c.indicado||'';
   document.getElementById('e-apto').value    = c.apto    ||'';
   document.getElementById('e-obs').value     = c.obs     ||'';
+  document.getElementById('e-tipo').value    = c.tipo    ||'Profissional Autônomo';
   const eCat = document.getElementById('e-cat');
   eCat.value = c.cat || '';
   document.getElementById('e-cat-val').value = c.cat || '';
@@ -895,6 +984,7 @@ async function saveEdit() {
   if (!nome||!cat) { toast('Preencha o nome e a categoria!'); return; }
   const c = contacts[currentContactIdx]; if (!c) return;
   const updated = { nome, cat,
+    tipo: document.getElementById('e-tipo').value || 'Profissional Autônomo',
     tel:formatPhone(document.getElementById('e-tel').value.trim()),
     wa:formatPhone(document.getElementById('e-wa').value.trim()),
     ig:document.getElementById('e-ig').value.trim(),
@@ -923,6 +1013,7 @@ function clearForm() {
   document.getElementById('f-cat').value='';
   document.getElementById('f-cat-val').value='';
   document.getElementById('f-horario').value='';
+  document.getElementById('f-tipo').value='Profissional Autônomo';
   document.querySelectorAll('#section-add .rev-star-btn').forEach(b=>b.classList.remove('sel'));
   selectedAddStar='';
 }
@@ -937,6 +1028,7 @@ async function addContact() {
   if (!apto) { toast('Preencha o apartamento!'); return; }
   const isNewCat = isNew;
   const c = { nome, cat,
+    tipo: document.getElementById('f-tipo').value || 'Profissional Autônomo',
     tel:formatPhone(document.getElementById('f-tel').value.trim()),
     wa:formatPhone(document.getElementById('f-wa').value.trim()),
     ig:document.getElementById('f-ig').value.trim(),
