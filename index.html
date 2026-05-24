@@ -175,6 +175,18 @@
   .btn-del svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
   .btn-del:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-light); }
 
+  .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  @media (max-width: 600px) { .cat-grid { grid-template-columns: repeat(2, 1fr); } }
+  .cat-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1rem; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; transition: all 0.18s; text-align: center; }
+  .cat-btn:hover { border-color: var(--accent); background: var(--accent-light); transform: translateY(-2px); box-shadow: var(--shadow); }
+  .cat-btn svg { width: 28px; height: 28px; stroke: var(--accent); fill: none; flex-shrink: 0; }
+  .cat-btn span { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.3; }
+  .cat-btn small { font-size: 11px; color: var(--muted); }
+  .back-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; color: var(--muted); font-size: 13px; font-family: 'DM Sans', sans-serif; padding: 0; margin-bottom: 1rem; transition: color 0.15s; }
+  .back-btn:hover { color: var(--text); }
+  .back-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; }
+  @keyframes dotdot { 0%{content:'.'} 33%{content:'..'} 66%{content:'...'} 100%{content:'.'} }
+  #dots { animation: dotdot 1.2s steps(1) infinite; display: inline-block; }
   .overlay { display: none; position: fixed; inset: 0; background: rgba(26,24,20,0.3); z-index: 300; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
   .overlay.show { display: flex; }
   .overlay-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem 2rem; font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-lg); }
@@ -233,22 +245,36 @@
   </div>
 
   <div id="section-lista" class="section active">
+    <!-- TOOLBAR SEMPRE VISÍVEL -->
     <div class="toolbar">
       <div class="search-wrap">
         <svg viewBox="0 0 24 24" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="search" placeholder="Buscar por nome, categoria ou indicado por..." oninput="renderCards()">
+        <input type="text" id="search" placeholder="Buscar por nome, categoria ou indicado por..." oninput="onSearch()">
       </div>
-      <select class="filter-select" id="filterCat" onchange="renderCards()">
+      <select class="filter-select" id="filterCat" onchange="onFilter()">
         <option value="">Todas as categorias</option>
       </select>
+    </div>
 
+    <!-- TELA INICIAL: CATEGORIAS -->
+    <div id="view-cats">
+      <div id="cat-grid-wrap">
+        <p id="cat-loading" style="text-align:center;color:var(--muted);padding:2rem 0;display:flex;align-items:center;justify-content:center;gap:10px"><span class="spinner" style="width:16px;height:16px;border-width:2px"></span> Aguarde...</p>
+        <div class="cat-grid" id="cat-grid"></div>
+      </div>
     </div>
-    <div class="stats-bar" id="stats-bar" style="display:none">
-      <span><strong id="stat-total">0</strong> contatos</span>
-      <span id="stat-filtered-wrap" style="display:none">· <strong id="stat-filtered">0</strong> exibidos</span>
-    </div>
-    <div class="cards-grid" id="cards">
-      <div class="empty-state"><svg viewBox="0 0 24 24" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Carregando contatos...</p></div>
+
+    <!-- TELA DE CONTATOS FILTRADOS -->
+    <div id="view-cards" style="display:none">
+      <button class="back-btn" id="back-btn" onclick="showCatView()" style="display:none">
+        <svg viewBox="0 0 24 24" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        Voltar às categorias
+      </button>
+      <div class="stats-bar" id="stats-bar" style="display:none">
+        <span><strong id="stat-total">0</strong> contatos</span>
+        <span id="stat-filtered-wrap" style="display:none">· <strong id="stat-filtered">0</strong> exibidos</span>
+      </div>
+      <div class="cards-grid" id="cards"></div>
     </div>
   </div>
 
@@ -487,11 +513,128 @@ function avgRating(cid) {
   return r.reduce((s,x) => s+Number(x.nota), 0) / r.length;
 }
 
-// ── NORMALIZAR (remove acentos para comparação) ──
+const MAIN_CATS = [
+  { key: 'Automotivo', label: 'Automotivo', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><rect x="1" y="8" width="22" height="12" rx="2"/><path d="M5 8V6a2 2 0 012-2h10a2 2 0 012 2v2"/><circle cx="7" cy="17" r="1.5"/><circle cx="17" cy="17" r="1.5"/></svg>' },
+  { key: 'Beleza', label: 'Beleza', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>' },
+  { key: 'Comércio', label: 'Comércio', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M3 9l1-5h16l1 5"/><path d="M3 9h18v11a1 1 0 01-1 1H4a1 1 0 01-1-1V9z"/><path d="M9 21V12h6v9"/></svg>' },
+  { key: 'Condomínio', label: 'Condomínio', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/></svg>' },
+  { key: 'Conveniência', label: 'Conveniência', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>' },
+  { key: 'Educação', label: 'Educação', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>' },
+  { key: 'Emergência', label: 'Emergência', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' },
+  { key: 'Eventos', label: 'Eventos', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
+  { key: 'Limpeza', label: 'Limpeza', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M3 3l4 4m0 0l10 10m-10-10l10 10M7 7L3 3m4 4v10a1 1 0 001 1h8a1 1 0 001-1V7"/><path d="M9 3h6l2 4H7L9 3z"/></svg>' },
+  { key: 'Manutenção', label: 'Manutenção', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>' },
+  { key: 'Moda', label: 'Moda & Ajustes', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg>' },
+  { key: 'Pets', label: 'Pets', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M10 5.172C10 3.782 8.423 2.679 6.5 3c-2.823.47-4.113 6.006-4 7 .08.703 1.725 1.722 3.656 1 1.261-.472 1.96-1.45 2.344-2.5"/><path d="M14 5.172C14 3.782 15.577 2.679 17.5 3c2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.96-1.45-2.344-2.5"/><path d="M8 14v.5"/><path d="M16 14v.5"/><path d="M11.25 16.25h1.5L12 17l-.75-.75z"/><path d="M4.42 11.247A13.152 13.152 0 0012 13c2.5 0 4.847-.655 6.847-1.753"/></svg>' },
+  { key: 'Residencial', label: 'Residencial', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' },
+  { key: 'Saúde', label: 'Saúde', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>' },
+  { key: 'Serviços Domésticos', label: 'Serviços Dom.', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3"/></svg>' },
+  { key: 'Tecnologia', label: 'Tecnologia', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
+  { key: 'Transporte', label: 'Transporte', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>' },
+  { key: 'Outros', label: 'Outros', svg: '<svg viewBox="0 0 24 24" stroke-width="1.8" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>' },
+];
+
+let activeCatKey = null;
+
 function normalize(s) {
   return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 }
 
+function getCatKey(catStr) {
+  if (!catStr) return 'Outros';
+  const parts = catStr.split(' - ');
+  // Novo formato: "Serviço - Categoria" → pega a última parte
+  const suffix = normalize(parts[parts.length - 1].trim());
+  const map = [
+    ['automotivo',          'Automotivo'],
+    ['beleza',              'Beleza'],
+    ['comercio',            'Comércio'],
+    ['condominio',          'Condomínio'],
+    ['conveniencia',        'Conveniência'],
+    ['educacao',            'Educação'],
+    ['emergencia',          'Emergência'],
+    ['eventos',             'Eventos'],
+    ['limpeza',             'Limpeza'],
+    ['manutencao',          'Manutenção'],
+    ['moda & ajustes',      'Moda'],
+    ['moda',                'Moda'],
+    ['pets',                'Pets'],
+    ['residencial',         'Residencial'],
+    ['saude e bem-estar',   'Saúde'],
+    ['saude',               'Saúde'],
+    ['servicos domesticos', 'Serviços Domésticos'],
+    ['tecnologia',          'Tecnologia'],
+    ['transporte',          'Transporte'],
+  ];
+  for (const [norm, key] of map) {
+    if (suffix === norm || suffix.includes(norm) || norm.includes(suffix)) return key;
+  }
+  return 'Outros';
+}
+
+function renderCatGrid() {
+  const loading = document.getElementById('cat-loading');
+  if (loading) loading.style.display = 'none';
+  const grid = document.getElementById('cat-grid');
+  grid.innerHTML = MAIN_CATS.map(c => {
+    const count = contacts.filter(ct => getCatKey(ct.cat) === c.key).length;
+    if (count === 0) return '';
+    return `<button class="cat-btn" onclick="selectCat('${c.key}')">
+      ${c.svg}
+      <span>${c.label}</span>
+      <small>${count} contato${count !== 1 ? 's' : ''}</small>
+    </button>`;
+  }).join('');
+}
+
+function selectCat(key) {
+  activeCatKey = key;
+  document.getElementById('view-cats').style.display = 'none';
+  document.getElementById('view-cards').style.display = 'block';
+  document.getElementById('back-btn').style.display = 'inline-flex';
+  document.getElementById('search').value = '';
+  document.getElementById('filterCat').value = '';
+  renderCards();
+}
+
+function showCatView() {
+  activeCatKey = null;
+  document.getElementById('view-cats').style.display = 'block';
+  document.getElementById('view-cards').style.display = 'none';
+  document.getElementById('back-btn').style.display = 'none';
+  document.getElementById('search').value = '';
+  document.getElementById('filterCat').value = '';
+}
+
+function onSearch() {
+  const q = document.getElementById('search').value.trim();
+  if (q) {
+    activeCatKey = null;
+    document.getElementById('view-cats').style.display = 'none';
+    document.getElementById('view-cards').style.display = 'block';
+    document.getElementById('back-btn').style.display = 'inline-flex';
+    renderCards();
+  } else if (!document.getElementById('filterCat').value) {
+    showCatView();
+  } else {
+    renderCards();
+  }
+}
+
+function onFilter() {
+  const cat = document.getElementById('filterCat').value;
+  if (cat) {
+    activeCatKey = null;
+    document.getElementById('view-cats').style.display = 'none';
+    document.getElementById('view-cards').style.display = 'block';
+    document.getElementById('back-btn').style.display = 'inline-flex';
+    renderCards();
+  } else if (!document.getElementById('search').value.trim()) {
+    showCatView();
+  } else {
+    renderCards();
+  }
+}
 // ── AUTOCOMPLETE ──
 let acIndex = { 'f-cat': -1, 'e-cat': -1 };
 
@@ -570,6 +713,7 @@ function populateSelects() {
 
 async function loadAll() {
   setStatus('loading','Carregando...');
+  hideOverlay();
   try {
     const [rC, rR, rCat] = await Promise.all([
       fetch(API+'?action=list',{redirect:'follow'}).then(r=>r.json()),
@@ -583,10 +727,14 @@ async function loadAll() {
     document.getElementById('stats-bar').style.display='flex';
     document.getElementById('stat-total').textContent=contacts.length;
     populateSelects();
-    renderCards();
+    renderCatGrid();
+    if (activeCatKey) renderCards();
   } catch(e) {
     setStatus('err','Erro de conexão');
+    document.getElementById('cat-loading').style.display='none';
     document.getElementById('cards').innerHTML=`<div class="empty-state" style="grid-column:1/-1"><svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.56 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 006.95 0"/></svg><p>Não foi possível conectar à planilha.</p><button class="btn-ghost" style="margin-top:1rem" onclick="loadAll()">Tentar novamente</button></div>`;
+  } finally {
+    hideOverlay();
   }
 }
 
@@ -597,7 +745,8 @@ function renderCards() {
   const filtered = contacts.filter(c => {
     const mQ = !q||(c.nome+c.cat+c.indicado+c.apto).toLowerCase().includes(q);
     const mC = !cat||c.cat===cat;
-    return mQ&&mC;
+    const mKey = !activeCatKey || getCatKey(c.cat) === activeCatKey;
+    return mQ&&mC&&mKey;
   });
   const sfW = document.getElementById('stat-filtered-wrap');
   if (q||cat) { sfW.style.display='inline'; document.getElementById('stat-filtered').textContent=filtered.length; }
@@ -815,7 +964,10 @@ async function addContact() {
     const data=await res.json();
     if(data.error) throw new Error(data.error);
     clearForm(); toast('✓ Contato salvo com sucesso!');
-    await loadAll(); switchTab('lista',document.querySelectorAll('.tab')[0]);
+    await loadAll();
+    activeCatKey = null;
+    showCatView();
+    switchTab('lista',document.querySelectorAll('.tab')[0]);
   } catch(e) { toast('Erro: '+e.message); }
   finally { hideOverlay(); btn.disabled=false; }
 }
